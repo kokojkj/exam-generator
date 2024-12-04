@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Mock Exam generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 10px;
+        }
+        .input-group input, 
+        .input-group select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #generateExam, #submitExam {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+        #generateExam:hover, #submitExam:hover {
+            background-color: #45a049;
+        }
+        #loading, #errorMessage {
+            text-align: center;
+            color: #666;
+            display: none;
+            margin: 10px 0;
+        }
+        #errorMessage {
+            color: red;
+        }
+        #examContainer {
+            margin-top: 20px;
+        }
+        .question {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+        .question h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .options {
+            display: flex;
+            flex-direction: column;
+        }
+        .options label {
+            margin-bottom: 10px;
+        }
+        #resultContainer {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        #apiKeyInput, #endpointInput {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Mock Exam generator</h1>
+        
+        <div class="input-group">
+            <label for="endpointInput">API Endpoint:</label>
+            <input type="text" id="endpointInput" placeholder="Enter API endpoint (optional) , keep it blank to use hack club endpoint">
+            
+        </div>
+
+        <div class="input-group">
+            <label for="apiKeyInput">OpenAI API Key:</label>
+            <input type="password" id="apiKeyInput" placeholder="Enter your OpenAI API Key" value="VK8XN4LSGN6QDTSKJSG6SFSVJSVF174TH56AZ70AQ22U0Q1L8ADL3RZSWNS5YS57">
+        </div>
+
+        <div class="input-group">
+            <label for="topicInput">Exam Topic:</label>
+            <input type="text" id="topicInput" placeholder="Enter exam topic (e.g., Python , algoratims)">
+        </div>
+        
+        <div class="input-group">
+            <label for="difficulty">Select Exam Difficulty:</label>
+            <select id="difficulty">
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
+        </div>
+        
+        <div class="input-group">
+            <label for="questionCount">Number of Questions:</label>
+            <input type="number" id="questionCount" min="1" value="5">
+        </div>
+        
+        <button id="generateExam">Generate Exam</button>
+        
+        <div id="loading">Generating mock exam questions... Please wait.</div>
+        <div id="errorMessage"></div>
+        
+        <div id="examContainer"></div>
+        
+        <div id="resultContainer" style="display:none;">
+            <h2>Exam Results</h2>
+            <p id="scoreDisplay"></p>
+        </div>
+    </div>
+
+    <script>
+        const DEFAULT_ENDPOINT = 'https://jamsapi.hackclub.dev/openai/chat/completions';
+
+        const generateExamPrompt = (topic, difficulty, questionCount) => {
+            return `Create an exam on ${topic} with the following specifications:
+- Difficulty Level: ${difficulty}
+- Number of Questions: ${questionCount}
+
+Return a JSON object with a "questions" array containing multiple-choice questions. 
+
+For EACH question, include:
+{
+    "question": "Detailed question text",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "correctAnswer": "Correct option text"
+}
+
+IMPORTANT: 
+- Ensure the response is a VALID JSON with a "questions" key
+- Questions should match the specified difficulty
+- Return ONLY the JSON object`;
+        };
+
+        document.getElementById('generateExam').addEventListener('click', async function() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('examContainer').innerHTML = '';
+
+            const apiKey = document.getElementById('apiKeyInput').value;
+            const endpoint = document.getElementById('endpointInput').value.trim() || DEFAULT_ENDPOINT;
+            const topic = document.getElementById('topicInput').value;
+            const difficulty = document.getElementById('difficulty').value;
+            const questionCount = document.getElementById('questionCount').value;
+            if (!apiKey) {
+                alert('Please enter your OpenAI API Key');
+                return;
+            }
+            if (!topic) {
+                alert('Please enter an exam topic');
+                return;
+            }
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-4o",
+                        response_format: { type: "json_object" },
+                        messages: [
+                            {
+                                role: "system", 
+                                content: "You are a helpful assistant that generates exam questions in a structured JSON format."
+                            },
+                            {
+                                role: "user", 
+                                content: generateExamPrompt(topic, difficulty, questionCount)
+                            }
+                        ],
+                    })
+                });
+
+                const data = await response.json();
+                
+                document.getElementById('loading').style.display = 'none';
+
+                let parsedResponse;
+                try {
+                    parsedResponse = JSON.parse(data.choices[0].message.content);
+                } catch (parseError) {
+                    throw new Error('Failed to parse JSON. Please check your input and try again.');
+                }
+
+                const questions = parsedResponse.questions;
+                if (!Array.isArray(questions)) {
+                    throw new Error('No questions array found in the response');
+                }
+
+                const examContainer = document.getElementById('examContainer');
+
+                questions.forEach((q, index) => {
+                    const questionDiv = document.createElement('div');
+                    questionDiv.classList.add('question');
+                    
+                    const shuffledOptions = q.options.sort(() => 0.5 - Math.random());
+                    
+                    questionDiv.innerHTML = `
+                        <h3>Question ${index + 1}</h3>
+                        <p>${q.question}</p>
+                        <div class="options">
+                            ${shuffledOptions.map((option, optIndex) => `
+                                <label>
+                                    <input type="radio" name="question${index}" value="${option}">
+                                    ${option}
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                    
+                    examContainer.appendChild(questionDiv);
+                });
+
+                const submitButton = document.createElement('button');
+                submitButton.id = 'submitExam';
+                submitButton.textContent = 'Submit Exam';
+                submitButton.addEventListener('click', () => gradeExam(questions));
+                examContainer.appendChild(submitButton);
+
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                const errorMessage = document.getElementById('errorMessage');
+                errorMessage.textContent = 'Error generating exam: ' + error.message;
+                errorMessage.style.display = 'block';
+            }
+        });
+
+        function gradeExam(questions) {
+            let score = 0;
+            const totalQuestions = questions.length;
+
+            questions.forEach((q, index) => {
+                const selectedOption = document.querySelector(`input[name="question${index}"]:checked`);
+                
+                if (selectedOption && selectedOption.value === q.correctAnswer) {
+                    score++;
+                }
+            });
+
+            const scorePercentage = Math.round((score / totalQuestions) * 100);
+            
+            const resultContainer = document.getElementById('resultContainer');
+            const scoreDisplay = document.getElementById('scoreDisplay');
+            
+            resultContainer.style.display = 'block';
+            scoreDisplay.innerHTML = `
+                Total Questions: ${totalQuestions}<br>
+                Correct Answers: ${score}<br>
+                Score: ${scorePercentage}%
+            `;
+        }
+    </script>
+</body>
+</html>
+
+
